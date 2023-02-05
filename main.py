@@ -1,4 +1,5 @@
 from web_scraper_class import NaturasiWebScraper
+from utilities_module import TerminalPrint
 import datetime
 import json
 

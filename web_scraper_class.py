@@ -5,6 +5,7 @@ import datetime
 import os
 import xml.etree.ElementTree as ET
 from os.path import exists
+from utilities_module import TerminalPrint
 
 class NaturasiWebScraper:
 	"""
@@ -51,8 +52,11 @@ class NaturasiWebScraper:
 				string_categories += f'"{category_id}",'
 			else:
 				string_categories += f'"{category_id}"'
+
 		self.endpoint = f'https://naturasi-ecommerce-search.mlreply.net/indexes/products/documents?filters=category_ids:({string_categories})'
-		#print(self.endpoint)
+		
+		#initializing a terminal printer to avoid newline/carriage return conflicts
+		self.terminal = TerminalPrint()
 
 
 	def get_product_dict(self, add_prices=False):
@@ -61,16 +65,17 @@ class NaturasiWebScraper:
 		spacing = 50
 		index = 0
 
+		self.terminal.print('Attempting to download product info..', show_time=True)
 		while True:
 			duplicate = False
 			url = self.endpoint+f'&from={index}&limit={spacing}'		
 			total_hits = requests.get(self.endpoint+f'&from=1000000&limit={spacing}').json()['totalHits']
 			load_time = round(index/total_hits*100, 2)
-			print(f'\rDownloading product info.. {load_time}% complete', end = '')
+			self.terminal.print(f'Downloading product info.. {load_time}% complete', show_time=True, flush=True)
 			with requests.get(url) as r: 
 				time.sleep(0.5)
 				payload = r.json()
-				#print(payload)
+				#self.terminal.print(payload)
 				if len(payload['documents']) != 0:
 
 					index += len(payload['documents'])
@@ -96,14 +101,14 @@ class NaturasiWebScraper:
 						#checking for duplicates:
 
 						if duplicate == True:
-							print(f"{el['id']} already present in the dictionary")
-							print(product_dict[el['id']], duplicate_el)
+							self.terminal.print(f"{el['id']} already present in the dictionary")
+							self.terminal.print(product_dict[el['id']], duplicate_el)
 							duplicate = False
 					
 				#finished parsing data aside from price	
 				else:
 
-					print(f'\nSuccessfully gathered information on {len(product_dict)} products.')
+					self.terminal.print(f'Successfully gathered information on {len(product_dict)} products.', show_time=True)
 
 					#adding prices if specified:
 					if add_prices == True:
@@ -113,8 +118,8 @@ class NaturasiWebScraper:
 							try:
 								product_dict[el]['price'] = prices_info[el]
 							except Exception as e:
-								print(e)
-								print(f'No price found for item {el}, defaulting to None.')
+								self.terminal.print(e, show_time=True)
+								self.terminal.print(f'No price found for item {el}, defaulting to None.')
 
 					return product_dict
 
@@ -133,12 +138,12 @@ class NaturasiWebScraper:
 
 		else:
 
-			print('No file-name specified.\nDefaulting to [datetime].json')
+			self.terminal.print('No file-name specified.\nDefaulting to [datetime].json', show_time=True)
 			file_path = f'data/{file_name}_{self.date.strftime("%d_%m_%Y_%H_%M")}.json'
 
 		with open(file_path, "w") as file:
 				file.write(json.dumps(self.get_product_dict(add_prices=add_prices)))
-				print(f"Data written to file: {file_path}")
+				self.terminal.print(f"Data written to file: {file_path}", show_time=True)
 
 
 
@@ -146,12 +151,6 @@ class NaturasiWebScraper:
 	
 		total_hits = requests.get(self.endpoint+'&from=1000000&limit=50').json()['totalHits']
 		return total_hits
-
-
-	#takes a product sku as input
-	def get_products_price(self, sku):
-		url = f''
-		pass
 
 
 	# buffer of 200 seems to produce a valid response (with 200 elements)
@@ -176,11 +175,11 @@ class NaturasiWebScraper:
 
 				#the file format is formatted to a JSON array
 				product_url = f'https://app.naturasi.it/rest/store_vetrina0/V1/prices-stocks?skus={sku_string}'
-				#print(product_url)
+				#self.terminal.print(product_url)
 				time.sleep(0.5)
 				req = requests.get(product_url)
 				product_stock_info_parcel = req.json()
-				print(f'\rDownloading prices.. {round(dl_progress_index/len(product_dict)*100, 2)}% complete.', end='')
+				self.terminal.print(f'Downloading prices.. {round(dl_progress_index/len(product_dict)*100, 2)}% complete.', show_time=True, flush=True)
 				for product in product_stock_info_parcel: 
 					#casting the product_id to string to match the product_dict synthax and 
 					#provide faster runtime performance when comparing keys
@@ -193,6 +192,9 @@ class NaturasiWebScraper:
 
 		return product_stock_info
 
+	def terminal_time(self):
+
+		return f'[{datetime.datetime.today().strftime("%d:%m:%Y-%H:%M")}]'
 
 
 	
