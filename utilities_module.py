@@ -51,9 +51,11 @@ class RUtility(object):
 		for product in data:
 			parsed_data.append(data[product])
 
-		return json.dumps(parsed_data)
+		#formats time removing milliseconds (posix compliant?)
 
-	def save_to_file(self, parsed_data, file_name):
+		return json.dumps(self.convert_time_to_posix(parsed_data))
+
+	def save_to_file(self, parsed_data, file_name, dirname=None):
 
 		working_directory_path = ''
 		for count, el in enumerate(__file__.split('/')[0:-1]):
@@ -71,14 +73,40 @@ class RUtility(object):
 				)
 			terminal.print(message, show_time=True)
 
+		if dirname != None:
+			data_path = data_path + "/" + dirname
+			if not os.path.exists(data_path):
+				os.mkdir(data_path)
 		with open(data_path + "/" + file_name, "w") as file:
 			file.write(parsed_data)
 
+	#folder is the relative path from root directory. This function
+	#assumes each file has the same format, with only varying dates in the name.
+	def convert_folder(self, folder, new_folder=None):
+		for filename in os.listdir(folder):
+			type(filename)
+			file_path = folder + "/" + filename
+			self.save_to_file(
+				self.to_R_json_parser(file_path, path=True),
+				"R_" + filename,
+				dirname=new_folder
+				)
 
+	#removes milliseconds from python date format, to make it posix compliant (hopefully)
+	def convert_time_to_posix(self, data):
+
+		for product in data:
+			product['date'] = product['date'].split(".")[0]
 		
+		return data
+		
+
+
+
+
 
 if __name__ == "__main__":
 	ut = RUtility("ciao")
-	ut.save_to_file(ut.to_R_json_parser("/Users/matteodaros/Documents/coding/natura_web_scraper/data/all_products_no_deals_01_03_2023_10_51.json", path=True), "R_all_products_no_deals_01_03_2023_10_51.json")
-
+	#ut.save_to_file(ut.to_R_json_parser("/Users/matteodaros/Documents/coding/natura_web_scraper/data/all_products_no_deals_V0_04_03_2023_09_10.json", path=True), "R_all_products_no_deals_V0_04_03_2023_09_10.json")
+	ut.convert_folder("data/to_transform", "data1")
 		

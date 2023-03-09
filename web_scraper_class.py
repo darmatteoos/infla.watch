@@ -95,6 +95,10 @@ class NaturasiWebScraper:
 							'package_detail': el['fields']['package_detail'],
 							'unit_of_measurement': el['fields']['unit_of_measurement'],
 							'date': str(self.date),
+							'fresh': el['fields']['fresh'],
+							'frozen': el['fields']['frozen'],
+							'is_package': el['fields']['is_package'],
+							'thumbnail': el['fields']['thumbnail'] if ('thumbnail' in el['fields']) else None,							
 							'price': None 	#added later
 						}		
 
@@ -105,7 +109,7 @@ class NaturasiWebScraper:
 							self.terminal.print(product_dict[el['id']], duplicate_el)
 							duplicate = False
 					
-				#finished parsing data aside from price	
+				#finished parsing data aside from stock info
 				else:
 
 					self.terminal.print(f'Successfully gathered information on {len(product_dict)} products.', show_time=True)
@@ -113,13 +117,14 @@ class NaturasiWebScraper:
 					#adding prices if specified:
 					if add_prices == True:
 
-						prices_info = self.get_product_prices(product_dict)
+						prices_info = self.get_product_price_and_qty(product_dict)
 						for el in product_dict:
 							try:
-								product_dict[el]['price'] = prices_info[el]
+								product_dict[el]['price'] = prices_info[el][0]
+								product_dict[el]['qty'] = prices_info[el][1]
 							except Exception as e:
 								self.terminal.print(e, show_time=True)
-								self.terminal.print(f'No price found for item {el}, defaulting to None.')
+								self.terminal.print(f'No price/qty found for item {el}, defaulting to None.')
 
 					return product_dict
 
@@ -154,7 +159,7 @@ class NaturasiWebScraper:
 
 
 	# buffer of 200 seems to produce a valid response (with 200 elements)
-	def get_product_prices(self, product_dict, buffer=200):
+	def get_product_price_and_qty(self, product_dict, buffer=200):
 
 		#sku string is a concatenated list of sku numbers for url query purposes
 		sku_string = ''
@@ -179,12 +184,12 @@ class NaturasiWebScraper:
 				time.sleep(0.5)
 				req = requests.get(product_url)
 				product_stock_info_parcel = req.json()
-				self.terminal.print(f'Downloading prices.. {round(dl_progress_index/len(product_dict)*100, 2)}% complete.', show_time=True, flush=True)
+				self.terminal.print(f'Downloading stock info.. {round(dl_progress_index/len(product_dict)*100, 2)}% complete.', show_time=True, flush=True)
 				for product in product_stock_info_parcel: 
 					#casting the product_id to string to match the product_dict synthax and 
 					#provide faster runtime performance when comparing keys
 					#for info: https://stackoverflow.com/questions/11162201/is-it-always-faster-to-use-string-as-key-in-a-dict
-					product_stock_info[str(product['stock_item']['product_id'])] = product['price']
+					product_stock_info[str(product['stock_item']['product_id'])] = [product['price'], product['qty']]
 				
 
 				#resets string and counter for the next iteration

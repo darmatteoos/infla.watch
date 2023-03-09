@@ -75,7 +75,12 @@ def compare_product_dicts(old, new, file=True, write_to_file=False):
 
 #scraper for all products:
 scraper = NaturasiWebScraper([43178, 43247, 43076, 43016, 43277, 43301, 43382, 43997, 43586, 43562, 44018, 43844, 43622, 43922, 43982, 44073])
-scraper.write_product_dict_to_file(file_name='all_products_no_deals', add_date_to_filename=True, add_prices=True)
+
+#scraper.write_product_dict_to_file(file_name='all_products_no_deals', add_date_to_filename=True, add_prices=True)
+
+#new version
+scraper.write_product_dict_to_file(file_name='all_products_no_deals_V0', add_date_to_filename=True, add_prices=True)
+
 
 #scraper = NaturasiWebScraper([43076, 43076], add_prices=True)
 #scraper = NaturasiWebScraper([43922], file_name='prod_id_43922', date=datetime.datetime.today())
