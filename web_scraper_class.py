@@ -6,6 +6,9 @@ import os
 import xml.etree.ElementTree as ET
 from os.path import exists
 from utilities_module import TerminalPrint
+import random
+import html
+import re
 
 class NaturasiWebScraper:
 	"""
@@ -74,7 +77,13 @@ class NaturasiWebScraper:
 			self.terminal.print(f'Downloading product info.. {load_time}% complete', show_time=True, flush=True)
 			with requests.get(url) as r: 
 				time.sleep(0.5)
-				payload = r.json()
+				try:
+					payload = r.json()
+				except RequestsJSONDecodeError as e:
+					print(("The following response couldn't be"
+						f"parsed as json:\n{r.text()}"
+						f"\nError message: {e.msg} at position {e.pos}"
+						))
 				#self.terminal.print(payload)
 				if len(payload['documents']) != 0:
 
@@ -201,6 +210,133 @@ class NaturasiWebScraper:
 
 		return f'[{datetime.datetime.today().strftime("%d:%m:%Y-%H:%M")}]'
 
+
+
+class ConadWebScraper(object):
+	"""docstring for ConadWebScraper"""
+	def __init__(self):
+
+		self.time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+		self.endpoint = "https://spesaonline.conad.it"
+		#this is the only necessary cookie to get a full product response from the server, meaning one
+		#that has not only the general products, but also the ones ready for delivery in the location selected 
+		#Via Mario Pagano, 10, 20145 Milano MI, Italia
+		cookies = {
+    		"ecAccess": "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJlY0FjY2VzcyIsInVzZXJJZCI6IjM2NjM1NTgiLCJ0aW1lc3RhbXAiOjE2NzkyNDY3ODYyNjYsInR5cGVPZlNlcnZpY2UiOiJIT01FX0RFTElWRVJZIiwicG9pbnRPZlNlcnZpY2VJZCI6IjAwOTE5MiIsImRlbGl2ZXJ5QXJlYSI6ImFyZWFfMDA5MTkyXzIwNSIsImNhcnRJZCI6ImMtZS1DLTIzLTAwNDM0Njg5IiwiYW5vbnltb3VzQ2FydElkIjoiMWM3MmJhMjQtYzY2NC0xMWVkLWFiNjctNTU3MzY1NzI1MzY4IiwiY2FydENyZWF0aW9uVGltZSI6MTY3OTIzNjg3OTAwMCwidGltZXNsb3RFeHBpcmF0aW9uIjowLCJkZWxpdmVyeUFkZHJlc3MiOiJWaWEgTWFyaW8gUGFnYW5vLCAxMCwgMjAxNDUgTWlsYW5vIE1JLCBJdGFsaWEiLCJjb21wbGV0ZUFkZHJlc3MiOiJ7XCJjZWxscGhvbmVWZXJpZmllZFwiOmZhbHNlLFwiY291bnRyeVwiOntcImlzb2NvZGVcIjpcIklUXCIsXCJuYW1lXCI6XCJJdGFseVwifSxcImRpc3RyaWN0XCI6XCJNaWxhbm9cIixcImZsb29yXCI6MCxcImZvcm1hdHRlZEFkZHJlc3NcIjpcIlZpYSBNYXJpbyBQYWdhbm8sIDEwLCAyMDE0NSBNaWxhbm8gTUksIEl0YWxpYVwiLFwibGF0aXR1ZGVcIjo0NS40NzQzMTcsXCJsaWZ0XCI6ZmFsc2UsXCJsaW5lMVwiOlwiVmlhIE1hcmlvIFBhZ2FubywgMjAxNDUsIE1pbGFubywgSXRhbGlhXCIsXCJsaW5lMlwiOlwiMTBcIixcImxvbmdpdHVkZVwiOjkuMTcwMDgxOSxcIm5vdENvbXBsZXRlZFwiOmZhbHNlLFwicG9zdGFsQ29kZVwiOlwiMjAxNDVcIixcInJlY2VwdGlvblwiOmZhbHNlLFwidG93blwiOlwiTWlsYW5vXCJ9IiwibGF0aXR1ZGluZSI6NDUuNDc0MzE3LCJsb25naXR1ZGluZSI6OS4xNzAwODE5LCJuU3RvcmVzRm91bmQiOjIsIm1pc3NpbmdDYXJ0Q291bnRlciI6MCwidXNlckZpbmdlcnByaW50IjoiRkQxNzIxNENFQjg4QzlEMkQ1NTIyRjVDNjVFNjc2NjciLCJpc3MiOiJjb25hZCIsImlhdCI6MTY3OTMwMDA3Mn0.PEuNy5635fCxQiQgL40mHUxYbPA8YbZGx6g-pxt2rmo"
+		}
+		headers = {
+    		"Sec-Ch-Ua": '"Chromium";v="111", "Not(A:Brand";v="8"',
+    		"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/111.0.5563.65 Safari/537.36",
+    		"Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+    		"Accept-Encoding": "gzip, deflate",
+    		"Accept-Language": "it-IT,it;q=0.9,en-US;q=0.8,en;q=0.7"
+		}
+		self.session = requests.Session()
+		self.session.headers.update(headers)
+		self.session.cookies.update(cookies)
+		
+	#omit is a list of keywords to be excluded from categories URIs (to be tested)
+	def get_categories(self, omit=None):
+		
+		url = self.endpoint + "/home"
+		r = self.session.get(url)
+		if r.status_code == 200:
+			cats = re.findall(r'<a onclick=\"Header\.trackSecondLevel\(this\)\" href=\"/c(/.+)\">', r.text)
+		else:
+			print(f"Http code: {status_code}! Cannot access the homepage correctly.")
+
+		#to be tested...
+		if omit != None:
+			new_cats = []
+			to_remove = False
+			for cat in cats:
+
+				for el in omit:
+					if el in cat:
+						to_remove = True
+						break
+
+				if to_remove != True:
+					new_cats.append(cat)
+				else:
+					to_remove = False
+			cats = new_cats
+		
+		return cats
+
+
+	#takes a list of categories URIs as argument
+	def get_products(self, omit=None):
+		base_url = self.endpoint + "/c/level2/_jcr_content/root/search.loader.html"
+		cats = self.get_categories(omit)
+		tot = 0
+		tot_prods = []
+		i = 0
+		while i < len(cats):
+			cat = cats[i]
+			url = base_url + cat + ".html"
+			r = self.session.get(url)
+			if r.status_code == 200:
+				text = self.session.get(url).text
+				tot_cat = int(re.search(r"<b class=\"results\">(\d+).+</b>", text).group(1))
+
+				print(f"Attempting to get {tot_cat} products at {url}")
+				index = 0
+				pages = tot_cat // 30 + 1
+				prods = []
+				for page in range(1, pages+1):
+					if page == 1:
+						batch = self.find_products(text)
+						index += len(batch)
+						prods.extend(batch)
+						print(f"Got {index}/{tot_cat} elements.")
+					else:
+						#resets the url erasing page queries from previous iterations
+						time.sleep(random.random())
+						url = url.split("?")[0]
+						url = url + f"?page={page}"
+						text = self.session.get(url).text
+						batch = self.find_products(text)
+						index += len(batch)
+						prods.extend(batch)
+						print(f"Got {index}/{tot_cat} elements.")
+
+
+				tot_prods.extend(prods)
+				tot += tot_cat
+				i += 1
+			else:
+				i =- 1
+				print(f"Cannot access {url} correctly (http code: {r.status_code})")
+				print("Retrying in 30s..")
+				time.sleep(30)
+
+
+		print(f"Total products: {len(tot_prods)}/{tot}")
+		with open("./conad/data.json", "w") as f:
+			f.write(json.dumps(tot_prods))
+			print("Data written to ./conad/data.json")
+
+
+	def find_products(self, text):
+
+		escaped_prods = re.findall(r"<div nkPage=\"ProductCard\" class=\"component-ProductCard\" data-product=\"(.+)\">", text)
+		prods = []
+		for prod in escaped_prods:
+			prod = json.loads(html.unescape(prod))
+			prods.append({
+				'sku': prod["code"],
+				'name': prod["nome"],
+				'brand': prod["marchio"],
+				'netweight': prod["netQuantity"] if "netQuantity" in prod else None,
+				'unit_of_measurement': prod["netQuantityUm"],
+				'date': str(self.time),				
+				'price': prod["basePrice"],
+				'cat1': prod["categoriaPrimoLivello"],
+				'cat2': prod["categoriaSecondoLivello"],
+				'cat3': prod["categoriaTerzoLivello"]
+			})
+		return prods
 
 	
 
