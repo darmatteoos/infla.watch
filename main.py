@@ -1,4 +1,5 @@
 from web_scraper_class import NaturasiWebScraper
+from web_scraper_class import ConadWebScraper
 from utilities_module import TerminalPrint
 import datetime
 import json
@@ -75,11 +76,14 @@ def compare_product_dicts(old, new, file=True, write_to_file=False):
 
 #scraper for all products:
 scraper = NaturasiWebScraper([43178, 43247, 43076, 43016, 43277, 43301, 43382, 43997, 43586, 43562, 44018, 43844, 43622, 43922, 43982, 44073])
+#scraper2 = ConadWebScraper()
 
 #scraper.write_product_dict_to_file(file_name='all_products_no_deals', add_date_to_filename=True, add_prices=True)
 
 #new version
-scraper.write_product_dict_to_file(file_name='all_products_no_deals_V0', add_date_to_filename=True, add_prices=True)
+
+#scraper2.write_product_dict_to_file()
+scraper.write_product_dict_to_file(file_name='naturasi', add_date_to_filename=True, add_prices=True)
 
 
 #scraper = NaturasiWebScraper([43076, 43076], add_prices=True)

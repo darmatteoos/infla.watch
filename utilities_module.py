@@ -10,7 +10,7 @@ class TerminalPrint(object):
 		self.was_refreshed = False
 
 
-	def print(self, text, flush=False, show_time=False):
+	def print(self, text, flush=False, show_time=True):
 
 		print_string = ''
 
@@ -38,7 +38,7 @@ class RUtility(object):
 	def __init__(self, arg):
 			pass
 
-	def to_R_json_parser(self, data, path=False):
+	def to_R_json_parser(self, data, path=False, convert_time=True):
 
 		parsed_data = []
 		
@@ -53,7 +53,7 @@ class RUtility(object):
 
 		#formats time removing milliseconds (posix compliant?)
 
-		return json.dumps(self.convert_time_to_posix(parsed_data))
+		return json.dumps(self.convert_time_to_posix(parsed_data)) if convert_time == True else json.dumps(parsed_data)
 
 	def save_to_file(self, parsed_data, file_name, dirname=None):
 
@@ -82,15 +82,16 @@ class RUtility(object):
 
 	#folder is the relative path from root directory. This function
 	#assumes each file has the same format, with only varying dates in the name.
-	def convert_folder(self, folder, new_folder=None):
+	def convert_folder(self, folder, new_folder=None, convert_time=True):
+
 		for filename in os.listdir(folder):
-			type(filename)
-			file_path = folder + "/" + filename
-			self.save_to_file(
-				self.to_R_json_parser(file_path, path=True),
-				"R_" + filename,
-				dirname=new_folder
-				)
+			if filename != ".DS_Store":
+				file_path = folder + "/" + filename
+				self.save_to_file(
+					self.to_R_json_parser(file_path, convert_time, path=True),
+					"R_" + filename,
+					dirname=new_folder
+					)
 
 	#removes milliseconds from python date format, to make it posix compliant (hopefully)
 	def convert_time_to_posix(self, data):
@@ -99,6 +100,54 @@ class RUtility(object):
 			product['date'] = product['date'].split(".")[0]
 		
 		return data
+
+
+	def get_data_vars(self, folder):
+
+		variables = []
+		for filename in os.listdir(folder):
+			if filename != ".DS_Store":
+				file_path = folder + "/" + filename
+				with open(file_path, "r") as f:
+							data = json.loads(f.read())
+
+							#finds the variable names in the first element of the data in each file,
+							#the final iteration of variables has the most comprehensive list of vars
+							for var in data[next(iter(data))]:
+								if var not in variables:
+									variables.append(var)
+		return variables
+
+	def add_NAs(self, folder):
+
+		variables = self.get_data_vars(folder)
+		print(variables) #debugging
+		for filename in os.listdir(folder):
+					if filename != ".DS_Store":
+						file_path = folder + "/" + filename
+						with open(file_path, "r+") as f:
+							data = json.loads(f.read())
+							new_data = {}
+							missing_vars = [x for x in variables if x not in data[next(iter(data))]]
+							print(missing_vars)
+							for el in data:
+								new_data[el] = {}
+								for var in data[el]:
+									new_data[el][var] = data[el][var]
+								for var in missing_vars:
+									new_data[el][var] = None
+
+							#erases the old content of the files and overwrites it
+							f.seek(0)
+							f.truncate(0)
+							f.write(json.dumps(new_data))								
+
+
+				
+
+
+
+
 		
 
 
@@ -108,5 +157,6 @@ class RUtility(object):
 if __name__ == "__main__":
 	ut = RUtility("ciao")
 	#ut.save_to_file(ut.to_R_json_parser("/Users/matteodaros/Documents/coding/natura_web_scraper/data/all_products_no_deals_V0_04_03_2023_09_10.json", path=True), "R_all_products_no_deals_V0_04_03_2023_09_10.json")
-	ut.convert_folder("data/to_transform", "data1")
+	ut.add_NAs("data/to_transform")
+	ut.convert_folder("data/to_transform", new_folder="data3")
 		

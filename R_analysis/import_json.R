@@ -2,7 +2,7 @@ library(purrr)
 library(tidyverse)
 library(jsonlite)
 
-path <- "./R_formatted_data/data1"
+path <- "./R_formatted_data/data3"
 files <- dir(path, pattern = "*.json")
 
 # joining files in a single list (source:
@@ -17,3 +17,17 @@ data <- as_tibble(data)
 
 #converting character to posix 
 data$date <- as.POSIXct(data$date)
+
+#erase rows with no price
+data <- data |> 
+  filter(!is.na(price)) 
+
+#order by date and use it as the first column
+data <- data |> 
+  arrange(date) |> 
+  relocate(date, .before = sku)
+
+
+
+
+

@@ -76,7 +76,7 @@ class NaturasiWebScraper:
 			load_time = round(index/total_hits*100, 2)
 			self.terminal.print(f'Downloading product info.. {load_time}% complete', show_time=True, flush=True)
 			with requests.get(url) as r: 
-				time.sleep(0.5)
+				#time.sleep(0.5)
 				try:
 					payload = r.json()
 				except RequestsJSONDecodeError as e:
@@ -84,6 +84,8 @@ class NaturasiWebScraper:
 						f"parsed as json:\n{r.text()}"
 						f"\nError message: {e.msg} at position {e.pos}"
 						))
+				except Exception as e:
+					print(e)
 				#self.terminal.print(payload)
 				if len(payload['documents']) != 0:
 
@@ -190,7 +192,7 @@ class NaturasiWebScraper:
 				#the file format is formatted to a JSON array
 				product_url = f'https://app.naturasi.it/rest/store_vetrina0/V1/prices-stocks?skus={sku_string}'
 				#self.terminal.print(product_url)
-				time.sleep(0.5)
+				#time.sleep(0.5)
 				req = requests.get(product_url)
 				product_stock_info_parcel = req.json()
 				self.terminal.print(f'Downloading stock info.. {round(dl_progress_index/len(product_dict)*100, 2)}% complete.', show_time=True, flush=True)
@@ -216,7 +218,7 @@ class ConadWebScraper(object):
 	"""docstring for ConadWebScraper"""
 	def __init__(self):
 
-		self.time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+		self.time = datetime.datetime.now()
 		self.endpoint = "https://spesaonline.conad.it"
 		#this is the only necessary cookie to get a full product response from the server, meaning one
 		#that has not only the general products, but also the ones ready for delivery in the location selected 
@@ -234,6 +236,8 @@ class ConadWebScraper(object):
 		self.session = requests.Session()
 		self.session.headers.update(headers)
 		self.session.cookies.update(cookies)
+		self.mkt_id = "conad"
+		self.terminal = TerminalPrint()
 		
 	#omit is a list of keywords to be excluded from categories URIs (to be tested)
 	def get_categories(self, omit=None):
@@ -265,7 +269,6 @@ class ConadWebScraper(object):
 		return cats
 
 
-	#takes a list of categories URIs as argument
 	def get_products(self, omit=None):
 		base_url = self.endpoint + "/c/level2/_jcr_content/root/search.loader.html"
 		cats = self.get_categories(omit)
@@ -274,13 +277,14 @@ class ConadWebScraper(object):
 		i = 0
 		while i < len(cats):
 			cat = cats[i]
+			i += 1
 			url = base_url + cat + ".html"
 			r = self.session.get(url)
 			if r.status_code == 200:
 				text = self.session.get(url).text
 				tot_cat = int(re.search(r"<b class=\"results\">(\d+).+</b>", text).group(1))
 
-				print(f"Attempting to get {tot_cat} products at {url}")
+				self.terminal.print(f"Attempting to get {tot_cat} products at {url}")
 				index = 0
 				pages = tot_cat // 30 + 1
 				prods = []
@@ -289,7 +293,7 @@ class ConadWebScraper(object):
 						batch = self.find_products(text)
 						index += len(batch)
 						prods.extend(batch)
-						print(f"Got {index}/{tot_cat} elements.")
+						self.terminal.print(f"Got {index}/{tot_cat} elements.", flush = True)
 					else:
 						#resets the url erasing page queries from previous iterations
 						time.sleep(random.random())
@@ -299,23 +303,20 @@ class ConadWebScraper(object):
 						batch = self.find_products(text)
 						index += len(batch)
 						prods.extend(batch)
-						print(f"Got {index}/{tot_cat} elements.")
+						self.terminal.print(f"Got {index}/{tot_cat} elements.", flush = True)
 
 
 				tot_prods.extend(prods)
 				tot += tot_cat
-				i += 1
 			else:
 				i =- 1
-				print(f"Cannot access {url} correctly (http code: {r.status_code})")
-				print("Retrying in 30s..")
+				self.terminal.print(f"Cannot access {url} correctly (http code: {r.status_code})")
+				self.terminal.print("Retrying in 30s..")
 				time.sleep(30)
 
 
-		print(f"Total products: {len(tot_prods)}/{tot}")
-		with open("./conad/data.json", "w") as f:
-			f.write(json.dumps(tot_prods))
-			print("Data written to ./conad/data.json")
+		self.terminal.print(f"Total products: {len(tot_prods)}/{tot}")
+		return tot_prods
 
 
 	def find_products(self, text):
@@ -330,7 +331,7 @@ class ConadWebScraper(object):
 				'brand': prod["marchio"],
 				'netweight': prod["netQuantity"] if "netQuantity" in prod else None,
 				'unit_of_measurement': prod["netQuantityUm"],
-				'date': str(self.time),				
+				'date': self.time.strftime("%Y-%m-%d %H:%M:%S"),				
 				'price': prod["basePrice"],
 				'cat1': prod["categoriaPrimoLivello"],
 				'cat2': prod["categoriaSecondoLivello"],
@@ -338,10 +339,33 @@ class ConadWebScraper(object):
 			})
 		return prods
 
+
+
 	
 
 
+	def write_product_dict_to_file(
+			self, 
+			add_date_to_filename=True,
+			file_name=None
+			):
 
+		if file_name != None:
+
+			if add_date_to_filename == True:
+				file_path = f'data/{file_name}_{self.time.strftime("%d_%m_%Y_%H_%M_%S")}.json'
+			else:
+				file_path = f'data/{file_name}.json'
+
+		else:
+
+			self.terminal.print('No file-name specified.\nDefaulting to [mkt_id][date].json', show_time=True)
+			file_path = f'data/{self.mkt_id}_{self.time.strftime("%d_%m_%Y_%H_%M_%S")}.json'
+
+		with open(file_path, "w") as file:
+				file.write(json.dumps(self.get_products()))
+				self.terminal.print(f"Data written to file: {file_path}", show_time=True)
+	
 
 
 
