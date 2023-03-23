@@ -141,7 +141,9 @@ perc_data |>
   )
 
 
-  
+# things to be computed and cached every 24h approx:
+
+
 
 
 # perc_data %>% 
