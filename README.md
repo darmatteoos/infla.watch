@@ -13,11 +13,13 @@ root directory of the project, in which the `renv.lock` file is located.
 
 If instead of a local clone, you're cloning in a server and working via CLI,
 use the following:
+
 `Rscript -e 'install.packages("renv", repos="https://cloud.r-project.org")'`
+
 `Rscript -e 'renv::init(); renv::activate(); renv::restore()'`
 
 
-You need to download quarto (<https://quarto.org> in order to render the website 
+You need to download quarto (<https://quarto.org>) in order to render the website 
 files each time a new batch of data gets downloaded each day, after running the 
 command `quarto render ./quarto/index.qmd` from the root project directory (all the 
 website files are stored in the `_site/` directory).
