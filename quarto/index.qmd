@@ -1,0 +1,429 @@
+---
+format: html
+---
+
+```{r}
+#| label: load-packages
+#| include: false
+
+library(purrr)
+library(tidyverse)
+library(jsonlite)
+library(DBI)
+library(RPostgres)
+library(plotly)
+
+#connecting to a amazon aws RDS instance...
+
+user <- Sys.getenv("DB_USER")
+host <- Sys.getenv("DB_HOST")
+name <- Sys.getenv("DB_NAME")
+port <- Sys.getenv("DB_PORT")
+
+
+#or simply for testing purposes locally:
+con <- DBI::dbConnect(
+  RPostgres::Postgres(),
+  dbname = name, #this is not the real name of db, but apparently this what has to be done (https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ConnectToPostgreSQLInstance.html#USER_ConnectToPostgreSQLInstance.Troubleshooting)
+  host = host,
+  port = port,
+  user = user
+)
+
+#accessing database content as a dataframe (extremely inefficient but
+#I'll stick to this for the moment)
+data <- tbl(con, "prices")
+
+data <- data |>
+  collect()
+
+dbDisconnect(con)
+
+#converting to a simpler date format for comparisons and excluding
+#unecessary qty
+data <- data |>
+  mutate(date = as.Date(date, format = "%Y-%m-%d"))
+
+#storing variables for data rapresentation
+
+mkts <- unique(data$chain)
+num_mkts <- as.integer(length(unique(data$chain)))
+
+num_prods <- as.integer(length(unique(filter(data, data$chain == "naturasi")[['sku']])))
+
+#removing duplicates (data is malformed especially on 03-04-2023 - fixed)
+data <- data |>
+  distinct()
+
+# dbExecute(con, "TRUNCATE TABLE prices;")
+
+# dbWriteTable(con, "prices", data, append = T)
+
+
+#creating a named list with each element contaning the data for each chain
+mkts_data <- vector("list", length = 0)
+for (mkt in mkts) {
+  mkts_data[[mkt]][['data']] <- data |> 
+    filter(chain == mkt)
+  mkts_data[[mkt]][['first']] <- sort(unique(mkts_data[[mkt]][['data']]$date))[1]
+  mkts_data[[mkt]][['last']] <- sort(unique(mkts_data[[mkt]][['data']]$date))[length(unique(mkts_data[[mkt]][['data']]$date))]
+}
+
+rm(data)
+
+#I need to group by a regex that searches for instance for at least one
+#word matching (e.g I want two products with at least a word in common to be
+#in the same group)
+# mkts_data[["naturasi"]] |> 
+#   group_by(sku) |> 
+#   summarize(
+#     max = max(date)
+#   ) |> 
+#   filter(max != as.Date("2023-04-06")) |> 
+#   View()
+
+
+#filtering by two dates to compare between them, without taking into account
+#the data that isn't comprised of both, then removes the row used for filtering
+for (mkt in mkts) {
+  mkts_data[[mkt]][['p1']] <- mkts_data[[mkt]][['data']] |>
+    filter(date %in% c(mkts_data[[mkt]][['first']], mkts_data[[mkt]][['last']])) |>
+    group_by(sku) |>
+    mutate(n = n()) |>
+    filter(n == 2) |>
+    select(-c(n))
+}
+
+
+#adding on the same row both the price of the first and second date,
+#for comparison purposes, using id_cols with the unique identifier (sku)
+#to avoid renaming, rebranding or changes to the package information to
+#give duplicate rows (see further down for examples). This means that
+#any meaningful information for plotting must be derived from earlier data
+
+for (mkt in mkts) {
+  mkts_data[[mkt]][['p1']] <- mkts_data[[mkt]][['p1']] |>
+    pivot_wider(
+      id_cols = c("sku"),
+      names_from = date,
+      values_from = price
+    )
+}
+
+#some skus that don't seem to be converted by pivot_wider w/o id_cols:
+# sku
+# <chr>
+#   1 000100042838
+# 2 000100059557
+# 3 000100043846
+# 4 000100061737
+# 5 000100043848
+# 6 000100043847
+# 7 000100043849
+# 8 000100021314
+# 9 000100059550
+# 10 000100066312
+# 11 000100029223
+
+for (mkt in mkts) {
+  mkts_data[[mkt]][['p1']] <- mkts_data[[mkt]][['p1']] |>
+    ungroup() |>
+    rename(
+      before = as.character(mkts_data[[mkt]][['first']]),
+      after = as.character(mkts_data[[mkt]][['last']])
+    ) |>
+    mutate(
+      price_delta = (after - before),
+      has_risen = (before < after),
+      has_lowered = (before > after),
+      is_equal = (before == after)
+    )
+  
+  mkts_data[[mkt]][['p3']] <- mkts_data[[mkt]][['p1']]
+}
+
+for (mkt in mkts) {
+  mkts_data[[mkt]][['p1']] <- mkts_data[[mkt]][['p1']] |>
+    mutate(
+      price = ifelse(
+        before == after,
+        "is_equal",
+        ifelse(
+          before <= after,
+          "has_risen",
+          "has_lowered"
+        )
+      )
+    ) |> 
+    mutate(price = as.factor(price)) |> 
+    select(-c(before:is_equal)) 
+}
+
+
+for (mkt in mkts) {
+  mkts_data[[mkt]][['p1']] <- mkts_data[[mkt]][['p1']] |>
+    count(price) |>
+    mutate(perc = round(n / sum(n) * 100, 2))
+    
+  #adding info about the percentage of products that
+  #had their price lowered, risen or the same as before
+  for (fac in mkts_data[[mkt]][['p1']]$price) {
+    mkts_data[[mkt]][[fac]] <- mkts_data[[mkt]][['p1']] |> 
+    filter(price == fac) |> 
+    pull(perc)
+  }
+    
+  mkts_data[[mkt]][['p1']] <- mkts_data[[mkt]][['p1']] |>
+    ggplot(
+      mapping = aes(x = price, y = n, fill = price, label = paste0(perc, "%")),
+      title = "prova"
+    ) +
+    geom_col() +
+    geom_text(
+      position = position_stack(vjust = 0.5),
+      color = "black",
+      size = 3 
+    ) +
+    scale_fill_manual(
+      values = c("gray30", "#2780e3", "gray70"),
+      labels = c("diminuito", "aumentato", "stazionario")
+      ) +
+    labs(
+      title = sprintf("Products price comparison between %s and %s", mkts_data[[mkt]][['first']], mkts_data[[mkt]][['last']]),
+      subtitle = sprintf("%s", mkt),
+      x = "",
+      y = "count",
+      fill = "Prezzo"
+    )
+}
+
+
+#takes the desired plot binwidth and the desired percentile used for
+# excluding values as input, returns the value that corresponds to 
+#that percentile
+# find_percentile <- function(binwidth, perc) {
+#   delta_seq <- seq(max(mkts_data[['naturasi']][['p3']]$price_delta), min(mkts_data[['naturasi']][['p3']]$price_delta), by = -binwidth)
+#   i <- 1
+#   n_total <- mkts_data[['naturasi']][['p3']] |>
+#     filter(price_delta > 0) |> 
+#     summarise(n = n()) |> 
+#     pull(n)
+#   n_excluded <- 0
+#   while (1-n_excluded/n_total > perc) {
+#     n_excluded <- mkts_data[['naturasi']][['p3']] |>
+#       filter(price_delta > delta_seq[i]) |> 
+#       summarise(n = n()) |> 
+#       pull(n)
+#     i <- i + 1
+#   }
+#   return(delta_seq[i])
+# }
+
+percentile <- quantile(filter(mkts_data[['naturasi']][['p3']], price_delta > 0)$price_delta, 0.995)
+mkts_data[['naturasi']][['p3']] <- mkts_data[['naturasi']][['p3']] |>
+  filter(price_delta > 0 & price_delta < percentile) |>
+  ggplot(aes(x = price_delta)) +
+  geom_histogram(binwidth = 0.1, fill = "#2780e3") +
+  geom_vline(
+    xintercept = percentile, 
+    #color = "red"
+    ) + 
+  annotate(
+    "text", 
+    x = percentile-0.7, 
+    y = 20, 
+    label = "99.5° percentile", 
+    vjust = -1.5, 
+    #color = "red"
+    ) +
+  annotate(
+    "segment", 
+    x = percentile-0.7, 
+    y = 9.5, 
+    xend = percentile, 
+    yend = 7.5, 
+    arrow = arrow(length = unit(0.3, "cm")), 
+    #color = "red"
+    ) + 
+  scale_x_continuous(labels = function(x) paste0(x, "%")) + 
+  labs(
+    y = "n° prodotti"
+  )
+
+
+#filtering for just the products with brand "NaturaSì" and
+#that are present in each date observation
+
+for (mkt in mkts) {
+  mkts_data[[mkt]][['p2']] <- mkts_data[[mkt]][['data']] |>
+    group_by(sku) |>
+    mutate(n = n()) |>
+    ungroup() |>
+    filter(n == max(n)) |>
+    select(-c(n))
+}
+
+for (mkt in mkts) {
+  mkts_data[[mkt]][['p2']] <- mkts_data[[mkt]][['p2']] |>
+    select(date, sku, price) |>
+    pivot_wider(
+      values_from = price,
+      names_from = date
+    )
+}
+
+for (mkt in mkts) {
+  mkts_data[[mkt]][['p2']] <- mkts_data[[mkt]][['p2']] |>
+    pivot_longer(
+      cols = matches("2023")&(!matches(as.character(mkts_data[[mkt]][['first']]))),
+      names_to = "date",
+      values_to = "price"
+    ) |>
+    mutate(date = as.Date(date, format = "%Y-%m-%d")) |>
+    mutate(delta = (price - .data[[as.character(mkts_data[[mkt]][['first']])]])/(.data[[as.character(mkts_data[[mkt]][['first']])]])*100) |>
+    group_by(date) |>
+    summarize(
+      mean_delta = mean(delta)
+    ) |>
+    ungroup()
+}
+
+## I escaped the % sign with another % sign
+for (mkt in mkts) {
+  mkts_data[[mkt]][['infl']] <- last(mkts_data[[mkt]]$p2$mean_delta)
+  delta_days <- as.numeric(mkts_data[[mkt]]$last-mkts_data[[mkt]]$first)
+  mkts_data[[mkt]][['implied_infl']] <- last(mkts_data[[mkt]]$p2$mean_delta)/delta_days*365
+  mkts_data[[mkt]][['p2']] <- mkts_data[[mkt]][['p2']] |>
+  ggplot(aes(date, mean_delta)) +
+  geom_line(color = "#2780e3") +
+  labs(
+    title = sprintf("%s index price change (%%)", mkt),
+    subtitle = sprintf("using %s data as benchmark", mkts_data[[mkt]][['first']]),
+    x = "Date",
+    y = "% change"
+  )  
+}
+
+```
+
+::: {#mydiv .transparent style="font-size: 30pt; text-align: center; background-color: transparent; border: none; font-weight: bold; line-height: 30pt"}
+Ciao! Mi chiamo
+
+::: {style="text-decoration: underline;"}
+infla.watch
+:::
+
+sono un progetto [opensource](https://github.com/darmatteoos/food_inflation_tracker){style="text-decoration: none"} per per il monitoraggio dei prezzi dei maggiori supermercati italiani
+:::
+
+Al momento sto tenendo traccia di **`r format(num_prods, scientific=FALSE)`** prodotti appartenenti a **`r num_mkts`** supermercati con marketplace online. Tutti i grafici e le rappresentazioni tabulari sono aggiornati giornalmente. Se vuoi entrare in possesso dei miei dati, [contatta](#contacts){style="text-decoration: none"} il mio sviluppatore.
+
+## L'inflazione è sotto i tuoi occhi
+
+Ho cominciato a monitorare i prezzi il **`r format(mkts_data$naturasi$first, "%d/%m/%Y")`**, da allora i prezzi sono aumentati dello **`r round(mkts_data[['naturasi']][['infl']], 2)`%**, che corrisponde a un'inflazione annua pari a **`r round(mkts_data[['naturasi']][['implied_infl']], 2)`%** (qui di seguito un grafico più dettagliato). 
+
+```{r} 
+#| label: plot-timeseries-naturasi
+#| fig-cap: "L'andamento giornaliero dell'aumento medio dei prezzi, scopri qui come viene calcolato"
+#| echo: false
+
+mkts_data[['naturasi']][['p2']]
+```
+
+Complessivamente, il **`r mkts_data[['naturasi']][['is_equal']]`%** dei prodotti ha ha mantenuto un prezzo costante, il **`r mkts_data[['naturasi']][['has_risen']]`%** ha subito un aumento, mentre il **`r mkts_data[['naturasi']][['has_lowered']]`%** una diminuzione.
+
+```{r} 
+#| label: plot-numrisen-naturasi
+#| fig-cap: "Un grafico che mostra il numero di prodotti con prezzo aumentato, diminuito o rimasto invariato"
+#| echo: false
+
+mkts_data[['naturasi']][['p1']]
+```
+
+Ecco infine, per il sottoinsieme dei prodotti con un prezzo maggiorato, una rappresentazione della distribuizione degli aumenti di prezzo in termini percentuali:
+
+<!-- Ecco infine un grafico interattivo che mostra come è ripartita l’escursione percentuale dei prezzi per il sottoinsieme dei prodotti il cui prezzo risulta maggiorato dall’inizio del monitoraggio:
+-->
+
+```{r} 
+#| label: plot-distribution-naturasi
+#| fig-cap: "L'altezza di ciascuna barra rappresenta il numero di prodotti che nel periodo considerato hanno aumentato il proprio prezzo della percentuale riportata nell'asse orizzontale. Non sono mostrati i prodotti che esulano dai valori in cui rientrano il 99.5% delle osservazioni ([qui](https://it.wikipedia.org/wiki/Centile) maggiori dettagli), per facilitare la visualizzazione."
+#| echo: false
+
+mkts_data[['naturasi']][['p3']]
+```
+
+Scopri come vengono calcolate queste percentuali [qui](www.example.com).
+
+## Non solo inflazione: la "shrinkflazione"
+
+<!--
+::: {}
+Molto spesso l'inflazione è molto più subdola di un semplice aumento dei prezzi. È infatti pratica comune nel commercio al dettaglio il ricorrere alla **sgrammatura** (in inglese **shrinkflation**): il prezzo di un prodotto rimane costante, mentre il suo packaging viene ridimensionato per contenerne di meno. Questo genere di pratica è difficilmente individuabile in maniera sistematica e automatizzata, motivo per cui mi limiterò qui a riportare un esempio.
+Se sei interessato a  veda [il paragrafo successivo](#limitations){style="text-decoration: none"} per chiarimenti).
+
+
+::: {style="float:right;" width="401"}
+![Un esempio di sgrammatura nel mercato italiano](https://www.scattidigusto.it/wp-content/uploads/2022/04/shrinkflation.jpeg)
+:::
+
+:::
+-->
+
+```{python}
+#| include: false
+
+from PIL import Image
+import requests
+
+r = requests.get("https://www.scattidigusto.it/wp-content/uploads/2022/04/shrinkflation.jpeg")
+
+path = "./img/"
+
+with open(path + "shrinkflation-example.jpeg", "wb") as f:
+  f.write(r.content)
+
+# Open the image
+image = Image.open(path + 'shrinkflation-example.jpeg')
+
+# Get the width of the image
+width = image.width
+
+# Calculate the new left and right coordinates for the crop
+left = int(width * 0.15)
+right = int(width * 0.85)
+
+# Crop the image
+cropped_image = image.crop((left, 0, right, image.height))
+
+# Save the cropped image
+cropped_image.save(path + 'cropped-shrinkflation-example.jpeg')
+
+```
+
+Molto spesso l'inflazione è molto più subdola di un semplice aumento dei prezzi. È infatti pratica comune nel commercio al dettaglio il ricorrere alla **sgrammatura** (in inglese **shrinkflation**): il prezzo di un prodotto rimane costante, mentre il suo packaging viene ridimensionato per contenerne di meno. 
+
+Questo genere di pratica è difficilmente individuabile in maniera sistematica e automatizzata, motivo per cui mi limiterò qui a riportare un esempio.
+Se sei interessato a  veda [il paragrafo successivo](#limitations){style="text-decoration: none"} per chiarimenti).
+
+![Un esempio di sgrammatura nel mercato inglese](https://i.dailymail.co.uk/1s/2022/03/29/08/55939805-0-image-a-11_1648539364650.jpg){fig-alt="Example of product shrinkflation in uk market" width="401"}
+
+## E ora? {#limitations}
+
+Questo sito non è altro che una proof of concept, in cui volevo dimostrare che è possibile tenere traccia dell'inflazione in maniera non troppo complessa. Questo vuole essere un tool a disposizione dei consumatori, per avere più trasparenza e immediatezza nei retroscena della grande distribuzione. 
+
+Il lavoro risulta soltanto abbozzato. Di seguito elenco alcune aggiunte che potrebbero migliorare l'esperienza utente:
+
+1. aggiungere un tracker per la shrinkflation, per avere una visione più completa del fenomeno inflattivo.
+
+2. aggiungere più catene di supermercati al progetto, per ottenere un campionamento più rappresentativo.
+
+3. rendere il database più accessibile, consentendo la ricerca comparata di singoli prodotti di cui il consumatore vuol tener traccia.
+
+Il punto 2 risulta impegnativo in termini di tempo richiesto a mantenere funzionante l'infrastruttura, il punto 3 presenta delle difficoltà computazionali non (credo) superabili con un budget limitato; per quanto riguarda il primo punto, richiede sicuramente una soluzione elegante e/o un approccio che fa uso del machine learning.
+
+## Contatti {#contacts}
+
+Profilo github: <https://github.com/darmatteoos>
+
+Indirizzo email: [darmatteoos@gmail.com](mailto:darmatteoos@gmail.com)

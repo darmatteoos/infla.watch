@@ -1,6 +1,8 @@
 import datetime
 import json
 import os
+import telegram
+import requests
 
 class TerminalPrint(object):
 	"""Utility to correctly format time expressions in front of a terminal message
@@ -35,10 +37,10 @@ class TerminalPrint(object):
 
 class RUtility(object):
 	"""docstring for RUtility"""
-	def __init__(self, arg):
+	def __init__(self):
 			pass
 
-	def to_R_json_parser(self, data, path=False, convert_time=True):
+	def to_R_json_parser(self, data, convert_time=True, path=False):
 
 		parsed_data = []
 		
@@ -48,11 +50,13 @@ class RUtility(object):
 
 
 		#removes nesting of products, removing id association and leaving onlu SKUs
-		for product in data:
-			parsed_data.append(data[product])
+		if type(data) is not list: 	#or isinstance(data, list)
+			for product in data:
+				parsed_data.append(data[product])
+		else:
+			parsed_data = data
 
 		#formats time removing milliseconds (posix compliant?)
-
 		return json.dumps(self.convert_time_to_posix(parsed_data)) if convert_time == True else json.dumps(parsed_data)
 
 	def save_to_file(self, parsed_data, file_name, dirname=None):
@@ -113,7 +117,7 @@ class RUtility(object):
 
 							#finds the variable names in the first element of the data in each file,
 							#the final iteration of variables has the most comprehensive list of vars
-							for var in data[next(iter(data))]:
+							for var in data[0]:
 								if var not in variables:
 									variables.append(var)
 		return variables
@@ -127,15 +131,18 @@ class RUtility(object):
 						file_path = folder + "/" + filename
 						with open(file_path, "r+") as f:
 							data = json.loads(f.read())
-							new_data = {}
-							missing_vars = [x for x in variables if x not in data[next(iter(data))]]
-							print(missing_vars)
+							new_data = []
+							missing_vars = [x for x in variables if x not in data[0]]
+							print(file_path, missing_vars)
 							for el in data:
-								new_data[el] = {}
+								new_el = {var:(el[var] if var not in missing_vars else None) for var in variables}
+								new_data.append(new_el)
+									
+								""" new_data[el] = {}
 								for var in data[el]:
 									new_data[el][var] = data[el][var]
 								for var in missing_vars:
-									new_data[el][var] = None
+									new_data[el][var] = None """
 
 							#erases the old content of the files and overwrites it
 							f.seek(0)
@@ -143,7 +150,38 @@ class RUtility(object):
 							f.write(json.dumps(new_data))								
 
 
-				
+	def add_supermkt(self, folder):
+
+		for filename in os.listdir(folder):
+			if filename != ".DS_Store":
+				with open(folder + "/" + filename, "r+") as f:
+					data = json.loads(f.read())
+					new_data = []
+					if "naturasi" in filename or "all_products_no_deals" in filename:
+						for el in data:
+							el["chain"] = "naturasi"
+							new_data.append(el)
+
+					if "conad" in filename:
+						for el in data:
+							el["chain"] = "conad"
+							new_data.append(el)
+
+					f.seek(0)
+					f.truncate(0)
+					f.write(json.dumps(new_data))
+
+
+class TelegramClient(object):
+	"""docstring for ClassName"""
+	def __init__(self, token, chat_id):
+		self.token = token
+		self.chat_id = chat_id
+		self.url = f'https://api.telegram.org/bot{self.token}/sendMessage'
+
+	def message(self, message):
+		payload = {'chat_id': self.chat_id, 'text': message}
+		requests.post(self.url, data=payload)
 
 
 
@@ -155,8 +193,9 @@ class RUtility(object):
 
 
 if __name__ == "__main__":
-	ut = RUtility("ciao")
+	ut = RUtility()
 	#ut.save_to_file(ut.to_R_json_parser("/Users/matteodaros/Documents/coding/natura_web_scraper/data/all_products_no_deals_V0_04_03_2023_09_10.json", path=True), "R_all_products_no_deals_V0_04_03_2023_09_10.json")
-	ut.add_NAs("data/to_transform")
-	ut.convert_folder("data/to_transform", new_folder="data3")
+	# ut.convert_folder("data/to_transform", new_folder="data5")
+	ut.add_NAs("R_analysis/R_formatted_data/data5")
+	ut.add_supermkt("R_analysis/R_formatted_data/data5")
 		

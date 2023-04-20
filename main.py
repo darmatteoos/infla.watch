@@ -1,102 +1,85 @@
 from web_scraper_class import NaturasiWebScraper
 from web_scraper_class import ConadWebScraper
 from utilities_module import TerminalPrint
-import datetime
-import json
+from utilities_module import TelegramClient
+from utilities_module import RUtility
+from datetime import datetime
+import time
+import os
+import sys
+import subprocess
+import telegram
+import asyncio
 
-
-# can compare both files or dictionaries. Files must be specified in string format
-# with root directory the same as "main.py".
-# return a dictionary with changed products by id and by values (eg. price, net weight, etc.)
-def compare_product_dicts(old, new, file=True, write_to_file=False):
-
-	if file == True:
-		old_path, new_path = (old, new)
-		with open(old_path, 'r') as old_file:
-			old_products = json.loads(old_file.read())
-		with open(new_path, 'r') as new_file:
-			new_products = json.loads(new_file.read())
-	else:
-		old_products = old
-		new_products = new
-
-	#first it checks if some elements have been added/removed:
-
-	changed_products = {'removed': [], 'added': []}
-
-	for product in old_products:
-		if product not in new_products:
-			changed_products['removed'].append(product)
-
-	for product in new_products:
-		if product not in old_products:
-			changed_products['added'].append(product)
-
-	if changed_products == {}:
-		print('No elements have been added/removed')
-	else:
-		for status in changed_products:
-			print(f'Elements {status}: {changed_products[status]}')
-
-	#then it checks if some info about the product has been updated:
-
-	changed_fields = {}
-
-	for product in old_products:
-		if product not in changed_products['added'] and product not in changed_products['removed']:
-			for field in old_products[product]:
-				# do not count changes in the date as a field change
-				if field == 'date':
-					continue
-				if old_products[product][field] != new_products[product][field]:
-					changed_fields[product] = {
-						field: {'old': old_products[product][field], 'new': new_products[product][field]}
-					}
-
-	if changed_fields == {}:
-		print('No elements have seen changes in their fields')
-	else:
-		for el in changed_fields:
-			for field in changed_fields[el]:
-				print(f'Element {el} changed {field} (old: {changed_fields[el][field]["old"]}, new: {changed_fields[el][field]["new"]})')
-
-	# tbd how to name the file concisely
-	if write_to_file == True:
-		pass
-
-	return {'changed_products': changed_products, 'changed_fields': changed_fields}
-
-
-
-
-
-
-
-
+bot_token = os.environ.get('TELEGRAM_BOT_TOKEN')
+chat_id = os.environ.get('TELEGRAM_CHAT_ID')
+client = TelegramClient(bot_token, chat_id)
 
 #scraper for all products:
 scraper = NaturasiWebScraper([43178, 43247, 43076, 43016, 43277, 43301, 43382, 43997, 43586, 43562, 44018, 43844, 43622, 43922, 43982, 44073])
 scraper2 = ConadWebScraper()
 
-#scraper.write_product_dict_to_file(file_name='all_products_no_deals', add_date_to_filename=True, add_prices=True)
+try:
+	start1 = time.time()
+	# scraper2.write_product_dict_to_file(file_name="to_transform/conad")
+	end1 = time.time()
 
-#new version
+	start2 = time.time()
+	scraper.write_product_dict_to_file(file_name='to_transform/naturasi', add_date_to_filename=True, add_prices=True)
+	end2 = time.time()
+	minsec = lambda diff: f"{int(diff)//60}m:{int(diff)%60}s"
+	message = (f"Job finished in {minsec(end2 - start1)}," +
+		f"\nThe first scraper started at {datetime.fromtimestamp(start1)}, ended at {datetime.fromtimestamp(end1)}, taking {minsec(end1 - start1)}." +
+		f"\nThe second scraper started at {datetime.fromtimestamp(start2)}, ended at {datetime.fromtimestamp(end2)}, taking {minsec(end2 - start2)}."
+	)
+	formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+	client.message(f"[{formatted_time}] Successfully scraped prices:\n" + message)
+	print(message)
+except Exception as e:	
+	formatted_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
+	client.message(f"[{formatted_time}] {str(e)}")
+	print(str(e))
 
-scraper2.write_product_dict_to_file()
-scraper.write_product_dict_to_file(file_name='naturasi', add_date_to_filename=True, add_prices=True)
+	# removing any 0 byte file left from the interruption of the scraping
+	root = "./data/to_transform"
+	for file in os.listdir(root):
+		file_path = root + "/" + file
+		if os.path.getsize(file_path) == 0:
+			os.remove(file_path) 
+	sys.exit(1)
 
 
-#scraper = NaturasiWebScraper([43076, 43076], add_prices=True)
-#scraper = NaturasiWebScraper([43922], file_name='prod_id_43922', date=datetime.datetime.today())
+ut = RUtility()
+#ut.save_to_file(ut.to_R_json_parser("/Users/matteodaros/Documents/coding/natura_web_scraper/data/all_products_no_deals_V0_04_03_2023_09_10.json", path=True), "R_all_products_no_deals_V0_04_03_2023_09_10.json")
+ut.add_NAs("data/to_transform")
+ut.add_supermkt("data/to_transform")
 
-#scraper.write_product_dict_to_file(add_date_to_filename=True)
-#product_dict = scraper.get_product_dict()
-#scraper.get_product_prices(product_dict)
 
-#scraper.get_product_dict()
-#print(scraper.get_products_size())
-#print(scraper.endpoint)
 
-#compare_product_dicts('data/all_products_no_deals_29_01_2023_10_43.json', 'data/all_products_no_deals_31_01_2023_18_40.json')
+#running the R script that updates all plots for the website
+subprocess.run(
+	args = ["/usr/local/bin/Rscript", "./import_json.R"],
+	cwd = os.getcwd() + "/R_analysis"
+	)
+
+
+#moving the transformed file in a temporary directory to be deleted every once in a while (to avoid backup issues)
+for file in os.listdir("./data/to_transform"):
+	source = "./data/to_transform/" + file
+	dest = "./data/temp/" + file
+	os.rename(source, dest)
+
+# #running the quarto render function to reflect new data on the web page
+# subprocess.run(
+# 	args = ["quarto", "render"],
+# 	cwd = os.getcwd() + "/quarto"
+# 	)
+
+
+
+# with open("data/metadata.json", "a") as f:
+# 	f.write(json.dumps({update: time.strftime("%Y-%m-%d", time.localtime())}))
+
+
 
 

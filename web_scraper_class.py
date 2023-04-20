@@ -105,7 +105,7 @@ class NaturasiWebScraper:
 							'netweight': el['fields']['netweight'],
 							'package_detail': el['fields']['package_detail'],
 							'unit_of_measurement': el['fields']['unit_of_measurement'],
-							'date': str(self.date),
+							'date': self.date.strftime("%Y-%m-%d %H:%M:%S"),
 							'fresh': el['fields']['fresh'],
 							'frozen': el['fields']['frozen'],
 							'is_package': el['fields']['is_package'],
@@ -137,7 +137,7 @@ class NaturasiWebScraper:
 								self.terminal.print(e, show_time=True)
 								self.terminal.print(f'No price/qty found for item {el}, defaulting to None.')
 
-					return product_dict
+					return self.parse_data(product_dict)
 
 
 	def write_product_dict_to_file(self, 
@@ -168,6 +168,11 @@ class NaturasiWebScraper:
 		total_hits = requests.get(self.endpoint+'&from=1000000&limit=50').json()['totalHits']
 		return total_hits
 
+	def parse_data(self, data):
+		parsed_data = []
+		for product in data:
+				parsed_data.append(data[product])
+		return parsed_data
 
 	# buffer of 200 seems to produce a valid response (with 200 elements)
 	def get_product_price_and_qty(self, product_dict, buffer=200):
@@ -275,16 +280,18 @@ class ConadWebScraper(object):
 		tot = 0
 		tot_prods = []
 		i = 0
+		num_retry = 0
 		while i < len(cats):
 			cat = cats[i]
 			i += 1
 			url = base_url + cat + ".html"
+			time.sleep(1)
 			r = self.session.get(url)
 			if r.status_code == 200:
 				text = self.session.get(url).text
 				tot_cat = int(re.search(r"<b class=\"results\">(\d+).+</b>", text).group(1))
 
-				self.terminal.print(f"Attempting to get {tot_cat} products at {url}")
+				# self.terminal.print(f"Attempting to get {tot_cat} products at {url}")
 				index = 0
 				pages = tot_cat // 30 + 1
 				prods = []
@@ -293,25 +300,32 @@ class ConadWebScraper(object):
 						batch = self.find_products(text)
 						index += len(batch)
 						prods.extend(batch)
-						self.terminal.print(f"Got {index}/{tot_cat} elements.", flush = True)
+						# self.terminal.print(f"Got {index}/{tot_cat} elements.", flush = True)
 					else:
 						#resets the url erasing page queries from previous iterations
-						time.sleep(random.random())
+						time.sleep(1)
 						url = url.split("?")[0]
 						url = url + f"?page={page}"
 						text = self.session.get(url).text
 						batch = self.find_products(text)
 						index += len(batch)
 						prods.extend(batch)
-						self.terminal.print(f"Got {index}/{tot_cat} elements.", flush = True)
+						# self.terminal.print(f"Got {index}/{tot_cat} elements.", flush = True)
 
 
 				tot_prods.extend(prods)
 				tot += tot_cat
+				self.terminal.print(f"Downloading {self.mkt_id}.. {round(i/len(cats)*100, 2)}% complete", flush = True)
 			else:
-				i =- 1
-				self.terminal.print(f"Cannot access {url} correctly (http code: {r.status_code})")
-				self.terminal.print("Retrying in 30s..")
+				i -= 1
+				if num_retry < 2:
+					self.terminal.print(f"Cannot access {url} correctly (http code: {r.status_code})")
+					self.terminal.print("Retrying in 30s..")
+				else:
+					raise ConnectionError((f"After {num_retry} retries the server is not responding correctly" +
+						f"at {url}."
+						))
+				num_retry += 1
 				time.sleep(30)
 
 
