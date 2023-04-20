@@ -133,17 +133,20 @@ class RUtility(object):
 							data = json.loads(f.read())
 							new_data = []
 							missing_vars = [x for x in variables if x not in data[0]]
+
+							#adding this in case there is no conad file to match against a naturasi file, so that
+							#the distinctive variables of a conad file are considered
+							for var in ['cat1', 'cat2', 'cat3']:
+								if var not in missing_vars:
+									missing_vars.append(var)
+								if var not in variables:
+									variables.append(var)
+
 							print(file_path, missing_vars)
 							for el in data:
 								new_el = {var:(el[var] if var not in missing_vars else None) for var in variables}
 								new_data.append(new_el)
 									
-								""" new_data[el] = {}
-								for var in data[el]:
-									new_data[el][var] = data[el][var]
-								for var in missing_vars:
-									new_data[el][var] = None """
-
 							#erases the old content of the files and overwrites it
 							f.seek(0)
 							f.truncate(0)

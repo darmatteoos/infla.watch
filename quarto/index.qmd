@@ -370,41 +370,9 @@ Se sei interessato a  veda [il paragrafo successivo](#limitations){style="text-d
 :::
 -->
 
-```{python}
-#| include: false
-
-from PIL import Image
-import requests
-
-r = requests.get("https://www.scattidigusto.it/wp-content/uploads/2022/04/shrinkflation.jpeg")
-
-path = "./img/"
-
-with open(path + "shrinkflation-example.jpeg", "wb") as f:
-  f.write(r.content)
-
-# Open the image
-image = Image.open(path + 'shrinkflation-example.jpeg')
-
-# Get the width of the image
-width = image.width
-
-# Calculate the new left and right coordinates for the crop
-left = int(width * 0.15)
-right = int(width * 0.85)
-
-# Crop the image
-cropped_image = image.crop((left, 0, right, image.height))
-
-# Save the cropped image
-cropped_image.save(path + 'cropped-shrinkflation-example.jpeg')
-
-```
-
 Molto spesso l'inflazione è molto più subdola di un semplice aumento dei prezzi. È infatti pratica comune nel commercio al dettaglio il ricorrere alla **sgrammatura** (in inglese **shrinkflation**): il prezzo di un prodotto rimane costante, mentre il suo packaging viene ridimensionato per contenerne di meno. 
 
 Questo genere di pratica è difficilmente individuabile in maniera sistematica e automatizzata, motivo per cui mi limiterò qui a riportare un esempio.
-Se sei interessato a  veda [il paragrafo successivo](#limitations){style="text-decoration: none"} per chiarimenti).
 
 ![Un esempio di sgrammatura nel mercato inglese](https://i.dailymail.co.uk/1s/2022/03/29/08/55939805-0-image-a-11_1648539364650.jpg){fig-alt="Example of product shrinkflation in uk market" width="401"}
 

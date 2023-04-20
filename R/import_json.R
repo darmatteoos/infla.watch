@@ -1,5 +1,10 @@
 #! /usr/local/bin/Rscript
 
+library(renv)
+
+# Restore packages for this project
+renv::activate()
+
 library(purrr)
 library(tidyverse)
 library(jsonlite)
@@ -7,7 +12,7 @@ library(DBI)
 library(RPostgres)
 
 first_time <- FALSE
-path <- "../data/to_transform"
+path <- "data/to_transform"
 files <- dir(path, pattern = "*.json")
 
 # joining files in a single list (source:
@@ -64,10 +69,18 @@ con <- DBI::dbConnect(
 # ...then connecting to the instance only to update it with daily
 #fresh data.
 
-if (first_time == TRUE) {
-  dbWriteTable(con, "supermkts", data)
-} else {
-  dbWriteTable(con, "prices", data, append = T)
-}
+# if (first_time == TRUE) {
+#   dbWriteTable(con, "supermkts", data)
+# } else {
+#   dbWriteTable(con, "prices", data, append = T)
+# }
+
+data <- tbl(con, "prices")
+data <- data |> 
+  collect() |> 
+  arrange(date) |> 
+  slice(n())
+
+print(data)
 
 dbDisconnect(con)

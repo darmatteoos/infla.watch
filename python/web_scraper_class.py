@@ -3,9 +3,8 @@ import json
 import time
 import datetime
 import os
-import xml.etree.ElementTree as ET
 from os.path import exists
-from utilities_module import TerminalPrint
+from python.utilities_module import TerminalPrint
 import random
 import html
 import re
@@ -38,13 +37,6 @@ class NaturasiWebScraper:
 	# date in datetime format
 	# file_name must be specified without extension name
 	def __init__(self, category_ids, date=None):
-
-		#setting the correct working directory
-		working_directory_path = ''
-		for count, el in enumerate(__file__.split('/')[0:-1]):
-			if count != 0:
-				working_directory_path += f'/{el}'
-		os.chdir(working_directory_path)
 
 		self.date = datetime.datetime.today()
 	
