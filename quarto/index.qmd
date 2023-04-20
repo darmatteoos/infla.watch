@@ -306,17 +306,17 @@ for (mkt in mkts) {
 
 ```
 
-::: {#mydiv .transparent style="font-size: 30pt; text-align: center; background-color: transparent; border: none; font-weight: bold; line-height: 30pt"}
+::: {#mydiv .transparent style="font-size: 30pt; text-align: center; background-color: transparent; border: none; line-height: 30pt"}
 Ciao! Mi chiamo
 
-::: {style="text-decoration: underline;"}
-infla.watch
+::: {style="text-decoration: underline; font-weight: bold"}
+inflaWatch
 :::
 
 sono un progetto [opensource](https://github.com/darmatteoos/food_inflation_tracker){style="text-decoration: none"} per per il monitoraggio dei prezzi dei maggiori supermercati italiani
 :::
 
-Al momento sto tenendo traccia di **`r format(num_prods, scientific=FALSE)`** prodotti appartenenti a **`r num_mkts`** supermercati con marketplace online. Tutti i grafici e le rappresentazioni tabulari sono aggiornati giornalmente. Se vuoi entrare in possesso dei miei dati, [contatta](#contacts){style="text-decoration: none"} il mio sviluppatore.
+Al momento sto tenendo traccia di **`r format(num_prods, scientific=FALSE)`** prodotti appartenenti a **1** <!--`r num_mkts`--> supermercati con marketplace online. Tutti i grafici e le rappresentazioni tabulari sono aggiornati giornalmente. Se vuoi entrare in possesso dei miei dati, [contatta](#contacts){style="text-decoration: none"} il mio sviluppatore.
 
 ## L'inflazione è sotto i tuoi occhi
 
