@@ -52,6 +52,7 @@ user <- Sys.getenv("DB_USER")
 host <- Sys.getenv("DB_HOST")
 name <- Sys.getenv("DB_NAME")
 port <- Sys.getenv("DB_PORT")
+psw <- Sys.getenv("DB_PSW")
 
 #or simply for testing purposes locally:
 con <- DBI::dbConnect(
@@ -59,7 +60,8 @@ con <- DBI::dbConnect(
   dbname = name, #this is not the real name of db, but apparently this what has to be done (https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/USER_ConnectToPostgreSQLInstance.html#USER_ConnectToPostgreSQLInstance.Troubleshooting)
   host = host,
   port = port,
-  user = user
+  user = user,
+  password = psw
 )
 
 #...(running postresql) to
